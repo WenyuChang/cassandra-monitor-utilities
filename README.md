@@ -17,7 +17,7 @@ Rich Rein
 <sp>1. Download the git repo with:
 <pre>
 	> cd
-    > git clone https://github.com/richrein/cassandra.bin.git
+    > git clone https://github.com/WenyuChang/cassandra-monitor-utilities.git
 </pre>
 
 <br>2. Add the following line near the end of the file:

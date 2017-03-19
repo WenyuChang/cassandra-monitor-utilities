@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#
+# Show cassandra cluster internal and external addresses
+# uses nodetool to get internal addresses and icanhazip.com for external addressses
+#
+
+# cassandra_node_ips [datacentername]
+
+if [ x"$1" != x ]; then
+        count=$(nodetool status | grep "$1" | grep -i datacenter | wc -l)
+        if [ $count == 1 ]; then
+                datacenter="$1";
+        else
+                echo "Error: $(basename $0): bad Datacenter name" 1>&2
+                echo "$(basename $0) [datacentername]" 1>&2
+                nodetool status | grep Datacenter 1>&2
+                exit 2
+        fi
+fi
+
+
+rowFormat="%-20s %-20s\n"
+
+nodetool status \
+| ( if [ x"$datacenter" == x ]; then cat; else sed -n "/Datacenter: $datacenter/,/Datacenter:/p"; fi ) \
+| sed -e 's:[^0-9.]*\([0-9.]*\).*:\1:' \
+| grep '[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*' \
+| (
+	while read localIp ; do 
+		printf "$rowFormat" $localIp 
+	done
+) | col -b
+
+

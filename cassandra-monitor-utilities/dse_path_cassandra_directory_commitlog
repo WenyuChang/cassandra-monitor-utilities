@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+for directory in $(dse_path_cassandra_directory_suspect_list)
+do
+	commitlog_directory="$directory/commitlog"
+        if [ -d "$commitlog_directory" ]; then echo "$commitlog_directory"; exit 0; fi
+done
+echo NOTFOUND; exit 99;
+

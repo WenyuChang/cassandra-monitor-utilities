@@ -1,0 +1,7 @@
+#!/bin/bash
+
+set -e
+set -x
+echo DROP KEYSPACE \"Keyspace1\"\; | cqlsh # >/dev/null 2>&1
+sleep 2
+cassandra-stress -d 127.0.0.1 --enable-cql --use-prepared-statements --replication-factor 3 --num-keys 10 --keys-per-call 2 --threads 1 --columns 10 --num-different-keys 20

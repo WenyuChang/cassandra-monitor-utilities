@@ -1,0 +1,57 @@
+
+ipaddr=56.201.240.63
+ipport=9443
+username="$username"
+password="$password"
+
+save_value=$ipaddr; printf "ipaddr $save_value: "; read ipaddr; if [ x"$username" == x ]; then ipaddr=$save_value; fi
+save_value=$ipport; printf "ipport $save_value: "; read ipport; if [ x"$username" == x ]; then ipport=$save_value; fi
+if [ x"$username" == x ]; then printf "username: "; read username; if [ x"$username" == x ]; then exit 0; fi; fi
+if [ x"$password" == x ]; then printf "password: "; read -s password; echo ''; if [ x"$password" == x ]; then exit 0; fi; fi
+
+# Curl reference
+# -sS no progress but show errors
+# -k save and use server certs for https
+curl -sS -k -X POST -d "{\"username\":\"$username\", \"password\":\"$password\"}" "https://$ipaddr:$ipport/login"
+echo 'sss'
+opscenter_session=$(curl -sS -k -X POST -d "{\"username\":\"$username\", \"password\":\"$password\"}" "https://$ipaddr:$ipport/login" | sed -e 's/{"[^"]*"[:" ]*\([^"]*\)"}/\1/')
+echo $opscenter_session
+# echo opscenter_session: $opscenter_session  # {"sessionid": "a3117e86acc7374f2a7d74e8e222f470"}
+if [ x"$opscenter_session" == x ]; then   echo Login Failed: $opscenter_session; fi
+
+print_dashboard_presets () {
+	echo "id                                     preset"
+	curl -sS -k -H "opscenter-session: $opscenter_session" "https://$ipaddr:$ipport/6005/rc/dashboard_presets/" \
+	| sed -e 's/"id": /\n\'$'\n/g' \
+	| sed -e 's/}.*$//g' \
+	| grep name \
+	| sed -e 's/"\([^"]*\)[", "]*name[": ]*\([^"]*\).*/\1   \2/' # "293d449f-904d-4303-8fd2-46c5d19f293e", "name": "mvis_piece_scan"
+}
+
+delete_dashboard_preset() {
+	preset_id="$1"
+	echo deleting "$preset_id"
+	curl -sS -k -H "opscenter-session: $opscenter_session" -X DELETE "https://$ipaddr:$ipport/6005/rc/dashboard_presets/$preset_id" 
+}
+
+if [ $(print_dashboard_presets | wc -l) == 1 ]; then echo bad user + password. ; exit 1; fi
+
+print_dashboard_presets 
+
+printf "\nEnter preset id to delete or press return to end: "
+while read preset_id
+do
+	if [ x"$preset_id" == x ]; then exit 0; fi
+	if [ x"$preset_id" == x"all" ]; then 
+		print_dashboard_presets | while read preset_id preset_name; do 
+			delete_dashboard_preset "$preset_id"
+		done;
+		continue;
+	fi
+	delete_dashboard_preset "$preset_id"
+	echo ''
+	echo ''
+	print_dashboard_presets 
+	printf "\nEnter preset id to delete or press return to end: "
+done
+

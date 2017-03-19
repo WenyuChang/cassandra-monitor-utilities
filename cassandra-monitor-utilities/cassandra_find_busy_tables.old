@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+
+# allow invokation of related scripts in this dir
+scriptdir=`dirname "$BASH_SOURCE"`; PATH="$scriptdir:$PATH"
+
+#ipaddr=$(ip_address_private)
+#yyyymmdd=$(date +'%Y%m%d')
+#hh=03 ; #$(date '%H')
+#mm=00; #$(date '%M')
+#dayofweek=Sun; #$(date '%a')
+#rm -f "$HOME/logdir/$ipaddr.*.$dayofweek.$hh.$mm" 2>&1 >/dev/null
+#log_file=${log_file:-"$HOME/logdir/$ipaddr.$yyyymmdd.$dayofweek.$hh.$mm"}
+#exec 2>&1 >"$log_file"
+
+samplePeriod=${samplePeriod:-5000}              # 5 seconds
+cqlsh_script=${cqlsh_script:-'cassandra_cqlsh'} # script to call cqlsh with correct password and host address
+pattern=${pattern:-'*'}                         # keyspace and table name pattern. Substring Match '(addr_book)'.  Exact match '(iv_mt addr_book_cont$)'. List of exact matches '(system local$|system peers$)'.
+while [ x"${1:0:1}" == x"-" ]; do
+	case "$1" in
+	"--milliseconds") samplePeriod="$2"; shift; shift; ;;
+        "--cqlsh")  cqlsh_script="$2"; shift; shift; ;;
+        *) echo "Uknown argument: $1"; exit 1; ;;
+	esac
+done
+
+if [ x"$1" != x ]; then
+	pattern="$1"; shift
+fi
+
+diffdir="$HOME/.diffs"
+if [ ! -d "$diffdir" ]; then
+	mkdir "$diffdir"
+fi
+
+cfstats_diff_int() {
+	kstable=$1
+	valuename=$2
+	a=$(sed -e "/$valuename:/!d" -e 's/.*: \([0-9.]*\)/\1/' ~/.diffs/$kstable.cfstats.first)
+	b=$(sed -e "/$valuename:/!d" -e 's/.*: \([0-9.]*\)/\1/' ~/.diffs/$kstable.cfstats.last)
+	echo $b - $a | bc  -q
+}
+
+(if [ x"$1" == x ]; then
+        echo 'select keyspace_name, columnfamily_name from system.schema_columnfamilies;' | $cqlsh_script | grep -v 'keyspace_name.*columnfamily_name' | grep -v -- '----------' | grep '|' | sed -e 's/ //g' -e 's/|/ /' | sort \
+        | egrep -e "$pattern"
+fi) \
+| while read ks table; do
+        printf '%-60s\n' "$ks.$table";
+	nodetool cfstats "$ks.$table" > "$diffdir/$ks.$table.cfstats.first" 2>&1
+	nodetool cfhistograms "$ks" "$table" > "$diffdir/$ks.$table.cfhistograms.first" 2>&1
+        topPartitions=$(nodetool   toppartitions "$ks" "$table" $samplePeriod )
+	nodetool cfstats "$ks.$table" > "$diffdir/$ks.$table.cfstats.last"  2>&1
+	nodetool cfhistograms "$ks" "$table" > "$diffdir/$ks.$table.cfhistograms.last" 2>&1
+	ops=$(echo $(cfstats_diff_int "$ks.$table" "Read Count") + $(cfstats_diff_int "$ks.$table" "Write Count") + $(cfstats_diff_int "$ks.$table" "Local read count") + $(cfstats_diff_int "$ks.$table" "Local write count") | bc -q)
+	if [ x$ops != x0 ]; then
+		printf "%s%s\n" "Read Count: " $(cfstats_diff_int "$ks.$table" "Read Count")
+		printf "%s%s\n" "Write Count: " $(cfstats_diff_int "$ks.$table" "Write Count")
+		printf "%s%s\n" "Local read count: " $(cfstats_diff_int "$ks.$table" "Local read count")
+		printf "%s%s\n" "Local write count: " $(cfstats_diff_int "$ks.$table" "Local write count")
+		echo ''
+		echo nodetool cfhistograms $ks $table
+		cat "$diffdir/$ks.$table.cfhistograms.last"
+		echo nodetool cfstats $ks.$table
+		cat "$diffdir/$ks.$table.cfstats.last" | grep -v -- '-------'
+		if [ x$(echo "$topPartitions" | grep 'Cardinality: ~0' | wc -l) != x2 ]; then
+			echo nodetool toppartitions $ks $table
+			echo "$topPartitions"
+			echo ''
+		fi
+		echo ''
+		echo ''
+	fi
+done

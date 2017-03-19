@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+DATADIRNAME='/Users/richrein/dse'
+cassandra_nodes_up_count 2>/dev/null
+cassandra_describe_cluster 2>/dev/null
+cassandra_sstable_version_count "$DATADIRNAME" 2>/dev/null
+

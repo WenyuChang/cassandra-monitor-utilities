@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#
+# Script to fill in paramenters like host and password
+# The plan is to lookup an encyrpted password in directory ~/.cassandra_cqlsh/user
+#
+
+# allow invokation of related scripts in this dir
+scriptdir=`dirname "$BASH_SOURCE"`
+PATH="$scriptdir:$PATH"
+
+if [ x$cqlsh_username != x ]; then uflag="-u"; fi
+if [ x$cqlsh_password != x ]; then pflag="-p"; fi
+
+exec cqlsh $uflag $cqlsh_username $pflag $cqlsh_password $(ip_address_private) "$@"
+
